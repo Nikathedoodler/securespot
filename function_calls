@@ -1,0 +1,6 @@
+<invoke name="edit_file">
+<parameter name="target_file">prisma/schema.prisma</parameter>
+<parameter name="instructions">I will create the initial Prisma schema for our smart locker system</parameter>
+<parameter name="code_edit">// This is your Prisma schema file,
+DATABASE_URL="postgresql://johndoe:V@b@0$.c0@localhost:5432/mydb?schema=public"
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
