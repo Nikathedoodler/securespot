@@ -6,6 +6,28 @@ import { LockerStatus } from "@prisma/client";
 export const lockerRouter = createTRPCRouter({
   getLockers: publicProcedure.query(async ({ ctx }) => {
     try {
+      // 1. Find expired bookings (endTime < now, not already CANCELED or EXPIRED)
+      const now = new Date();
+      const expiredBookings = await ctx.prisma.booking.findMany({
+        where: {
+          endTime: { lt: now },
+          status: { notIn: ["CANCELED", "EXPIRED"] },
+        },
+      });
+
+      // 2. For each expired booking, set status to EXPIRED and locker to AVAILABLE
+      for (const booking of expiredBookings) {
+        await ctx.prisma.booking.update({
+          where: { id: booking.id },
+          data: { status: "EXPIRED" },
+        });
+        await ctx.prisma.locker.update({
+          where: { id: booking.lockerId },
+          data: { status: LockerStatus.AVAILABLE },
+        });
+      }
+
+      // 3. Return lockers as usual
       return await ctx.prisma.locker.findMany({
         include: {
           location: true,

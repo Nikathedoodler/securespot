@@ -4,29 +4,11 @@ import React from "react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { api } from "@/trpc/react";
+import type { AppRouter } from "@/server/api/root";
+import { inferRouterOutputs } from "@trpc/server";
 
-interface Booking {
-  id: string;
-  startTime: Date;
-  endTime: Date;
-  status: string | null;
-  locker: {
-    id: string;
-    size: string;
-    location: {
-      name: string;
-    };
-  };
-  payment: {
-    id: string;
-    userId: string;
-    createdAt: Date;
-    updatedAt: Date;
-    status: string;
-    amount: number;
-    bookingId: string;
-  } | null;
-}
+type RouterOutput = inferRouterOutputs<AppRouter>;
+type Booking = RouterOutput["booking"]["getUserBookings"][number];
 
 export default function BookingList() {
   const [showExtensionModal, setShowExtensionModal] = useState(false);
@@ -45,6 +27,7 @@ export default function BookingList() {
 
   const cancelBookingMutation = api.booking.cancelBooking.useMutation({
     onSuccess: async (data) => {
+      console.log("Cancel Success:", data);
       await utils.booking.getUserBookings.invalidate();
       await utils.locker.getLockers.invalidate();
       setShowCancelModal(false);
@@ -58,6 +41,9 @@ export default function BookingList() {
       );
     },
     onError: (error) => {
+      console.error("Cancel Error:", error);
+      setShowCancelModal(false);
+      setSelectedBooking(null);
       toast.error(error.message || "Failed to cancel booking");
     },
   });
@@ -163,76 +149,82 @@ export default function BookingList() {
 
   return (
     <div className="space-y-6">
-      {bookings.map((booking) => (
-        <div
-          key={booking.id}
-          className="rounded-lg bg-gray-800/50 p-6 text-white shadow-lg backdrop-blur-sm"
-        >
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="text-lg font-semibold">
-                Locker #{booking.locker.id}
-              </h3>
-              <p className="mt-1 text-gray-400">
-                {booking.locker.location.name}
-              </p>
-              <p className="mt-2">Size: {booking.locker.size}</p>
-              <div className="mt-2 text-sm text-gray-400">
-                <p>
-                  Start:{" "}
-                  {booking.startTime.toLocaleString("en-US", {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  })}
+      {bookings
+        .filter(
+          (booking) =>
+            booking.status !== "CANCELED" &&
+            new Date(booking.endTime) > new Date()
+        )
+        .map((booking) => (
+          <div
+            key={booking.id}
+            className="rounded-lg bg-gray-800/50 p-6 text-white shadow-lg backdrop-blur-sm"
+          >
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">
+                  Locker #{booking.locker.id}
+                </h3>
+                <p className="mt-1 text-gray-400">
+                  {booking.locker.location.name}
                 </p>
-                <p>
-                  End:{" "}
-                  {booking.endTime.toLocaleString("en-US", {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  })}
+                <p className="mt-2">Size: {booking.locker.size}</p>
+                <div className="mt-2 text-sm text-gray-400">
+                  <p>
+                    Start:{" "}
+                    {booking.startTime.toLocaleString("en-US", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </p>
+                  <p>
+                    End:{" "}
+                    {booking.endTime.toLocaleString("en-US", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </p>
+                </div>
+                <p className="mt-2 font-mono">
+                  Amount paid: ${booking.payment?.amount?.toFixed(2) ?? "0.00"}
                 </p>
               </div>
-              <p className="mt-2 font-mono">
-                Amount paid: ${booking.payment?.amount?.toFixed(2) ?? "0.00"}
-              </p>
-            </div>
 
-            <div className="flex flex-col items-end space-y-2">
-              <span
-                className={`rounded-full px-3 py-1 text-sm font-medium ${
-                  booking.endTime > new Date()
-                    ? "bg-blue-500/20 text-blue-400"
-                    : "bg-red-500/20 text-red-400"
-                }`}
-              >
-                {booking.endTime > new Date() ? "ACTIVE" : "EXPIRED"}
-              </span>
-              <p className="text-sm text-gray-400">
-                {getTimeRemaining(booking.endTime)}
-              </p>
-              {booking.endTime > new Date() && (
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => handleExtend(booking)}
-                    disabled={processing}
-                    className="rounded px-3 py-1 text-sm font-medium text-green-400 hover:bg-green-500/10 hover:text-green-300 disabled:opacity-50"
-                  >
-                    Extend
-                  </button>
-                  <button
-                    onClick={() => handleCancel(booking)}
-                    disabled={processing}
-                    className="rounded px-3 py-1 text-sm font-medium text-red-400 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
+              <div className="flex flex-col items-end space-y-2">
+                <span
+                  className={`rounded-full px-3 py-1 text-sm font-medium ${
+                    booking.endTime > new Date()
+                      ? "bg-blue-500/20 text-blue-400"
+                      : "bg-red-500/20 text-red-400"
+                  }`}
+                >
+                  {booking.endTime > new Date() ? "ACTIVE" : "EXPIRED"}
+                </span>
+                <p className="text-sm text-gray-400">
+                  {getTimeRemaining(booking.endTime)}
+                </p>
+                {booking.endTime > new Date() && (
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => handleExtend(booking)}
+                      disabled={processing}
+                      className="rounded px-3 py-1 text-sm font-medium text-green-400 hover:bg-green-500/10 hover:text-green-300 disabled:opacity-50"
+                    >
+                      Extend
+                    </button>
+                    <button
+                      onClick={() => handleCancel(booking)}
+                      disabled={processing}
+                      className="rounded px-3 py-1 text-sm font-medium text-red-400 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        ))}
 
       {/* Extension Modal */}
       {showExtensionModal && selectedBooking && (
